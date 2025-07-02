@@ -126,4 +126,4 @@ Functions are citizens in a universe. FOS helps you understand this universe and
 
 ## License
 
-MIT
+APACHE 2.0
