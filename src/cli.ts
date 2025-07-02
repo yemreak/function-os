@@ -69,7 +69,7 @@ WHAT THE ANALYZER SHOWS:
 
 DATA PROVIDED:
   fos                    # List all functions with locations
-  fos find profile       # Filter functions by name pattern
+  fos find "^use.*"      # Filter functions by regex pattern
   fos info MiniProfile   # Show function details
   fos read MiniProfile   # Generate sed command for function body
   fos analyze            # Show call frequency and dependency groups
@@ -104,7 +104,7 @@ program
 // Find command
 program
   .command('find <pattern>')
-  .description('Search functions by name pattern')
+  .description('Search functions by regex pattern')
   .action((pattern) => {
     analyze();
     cmdFind(pattern);
@@ -473,14 +473,33 @@ function cmdFind(pattern: string) {
   const originalFunctions = new Map(functions);
   functions.clear();
 
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern, 'i'); // Case insensitive
+  } catch (e) {
+    // Fallback to simple string match if regex is invalid
+    console.log(chalk.yellow(`Invalid regex, using string match: ${pattern}`));
+    originalFunctions.forEach((func, id) => {
+      if (func.name.toLowerCase().includes(pattern.toLowerCase())) {
+        functions.set(id, func);
+      }
+    });
+    cmdList({ exports: false, module: null });
+    functions.clear();
+    originalFunctions.forEach((func, id) => {
+      functions.set(id, func);
+    });
+    return;
+  }
+
   originalFunctions.forEach((func, id) => {
-    if (func.name.toLowerCase().includes(pattern.toLowerCase())) {
+    if (regex.test(func.name)) {
       functions.set(id, func);
     }
   });
 
   // Display filtered results
-  cmdList({ exports: false, complex: false, module: null });
+  cmdList({ exports: false, module: null });
 
   // Restore original functions
   functions.clear();
