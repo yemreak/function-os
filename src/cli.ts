@@ -298,7 +298,7 @@ function extractTypeDefinitions(sourceFile: SourceFile, filePath: string): void 
     typeDefinitions.set(name, {
       filePath,
       line: interfaceDecl.getStartLineNumber(),
-      definition: interfaceDecl.getText().split('\n')[0] // Just the first line
+      definition: interfaceDecl.getText()
     });
   });
 
@@ -308,7 +308,7 @@ function extractTypeDefinitions(sourceFile: SourceFile, filePath: string): void 
     typeDefinitions.set(name, {
       filePath,
       line: typeAlias.getStartLineNumber(),
-      definition: typeAlias.getText().split('\n')[0] // Just the first line
+      definition: typeAlias.getText()
     });
   });
 
@@ -318,7 +318,7 @@ function extractTypeDefinitions(sourceFile: SourceFile, filePath: string): void 
     typeDefinitions.set(name, {
       filePath,
       line: enumDecl.getStartLineNumber(),
-      definition: enumDecl.getText().split('\n')[0] // Just the first line
+      definition: enumDecl.getText()
     });
   });
 }
@@ -916,13 +916,6 @@ function cmdType(typeName: string) {
 
 // Helper: Format type with clickable links
 function formatType(type: string): string {
-  // Extract the main type name (ignore generics, arrays, etc.)
-  const mainType = type.replace(/[\[\]<>?|&]/g, ' ').split(' ')[0];
-  
-  if (typeDefinitions.has(mainType)) {
-    return type.replace(mainType, `#${mainType}`);
-  }
-  
   return type;
 }
 
