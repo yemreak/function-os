@@ -772,6 +772,99 @@ function cmdAnalyze() {
       console.log(`- ${func.name} (${func.filePath}:${func.line})`);
     });
   }
+
+  // Dependency Graph Analysis
+  console.log('\nDependency Graph Analysis:');
+  console.log('='.repeat(50));
+  
+  // Build adjacency list for the dependency graph
+  const graph = new Map<string, Set<string>>();
+  const reverseGraph = new Map<string, Set<string>>();
+  
+  // Initialize graph nodes
+  functions.forEach(func => {
+    graph.set(func.name, new Set());
+    reverseGraph.set(func.name, new Set());
+  });
+  
+  // Build edges
+  functions.forEach(func => {
+    func.calls.forEach(calledName => {
+      const calledFunc = Array.from(functions.values()).find(f => f.name === calledName);
+      if (calledFunc) {
+        graph.get(func.name)!.add(calledFunc.name);
+        reverseGraph.get(calledFunc.name)!.add(func.name);
+      }
+    });
+  });
+  
+  // Find connected components using DFS
+  const visited = new Set<string>();
+  const components: string[][] = [];
+  
+  function dfs(node: string, component: string[]) {
+    if (visited.has(node)) return;
+    visited.add(node);
+    component.push(node);
+    
+    // Visit nodes this function calls
+    graph.get(node)?.forEach(child => dfs(child, component));
+    // Visit nodes that call this function
+    reverseGraph.get(node)?.forEach(parent => dfs(parent, component));
+  }
+  
+  // Find all connected components
+  functions.forEach(func => {
+    if (!visited.has(func.name)) {
+      const component: string[] = [];
+      dfs(func.name, component);
+      if (component.length > 1) { // Only show connected components
+        components.push(component);
+      }
+    }
+  });
+  
+  // Sort components by size
+  components.sort((a, b) => b.length - a.length);
+  
+  console.log(`\nFound ${components.length} dependency groups:`);
+  
+  // Display each component
+  components.forEach((component, idx) => {
+    console.log(`\n${chalk.yellow(`Group ${idx + 1}`)} (${component.length} functions):`);
+    
+    // Count total edges in this component
+    let edgeCount = 0;
+    component.forEach(funcName => {
+      edgeCount += graph.get(funcName)?.size || 0;
+    });
+    
+    console.log(`Total relationships: ${edgeCount}`);
+    
+    // Show the functions and their connections
+    component.slice(0, 10).forEach(funcName => {
+      const calls = Array.from(graph.get(funcName) || []).filter(n => component.includes(n));
+      const calledBy = Array.from(reverseGraph.get(funcName) || []).filter(n => component.includes(n));
+      
+      console.log(`  ${chalk.cyan(funcName)}`);
+      if (calls.length > 0) {
+        console.log(`    → calls: ${calls.join(', ')}`);
+      }
+      if (calledBy.length > 0) {
+        console.log(`    ← called by: ${calledBy.join(', ')}`);
+      }
+    });
+    
+    if (component.length > 10) {
+      console.log(`  ... and ${component.length - 10} more functions`);
+    }
+  });
+  
+  // Show isolated functions count
+  const isolatedCount = functions.size - visited.size;
+  if (isolatedCount > 0) {
+    console.log(`\n${chalk.gray(`${isolatedCount} isolated functions (no dependencies)`)}`)
+  }
 }
 
 // Command: Generate read commands
