@@ -708,10 +708,10 @@ function cmdAnalyze() {
     });
   }
 
-  // Find disconnected functions
+  // Find disconnected functions (only show exported functions that are unused)
   const disconnected = Array.from(functions.values()).filter(f => {
     const calledCount = callCounts.get(f.name) || 0;
-    return calledCount === 0 && f.calls.length === 0 && !f.exported && !f.isComponent;
+    return calledCount === 0 && f.calls.length === 0 && f.exported && !f.isComponent;
   });
 
   if (disconnected.length > 0) {
