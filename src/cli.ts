@@ -39,6 +39,7 @@ interface FunctionInfo {
 // Global state
 const functions = new Map<string, FunctionInfo>();
 const modules = new Map<string, string[]>();
+const typeDefinitions = new Map<string, { filePath: string; line: number; definition: string }>();
 let project: Project;
 
 // Initialize the CLI
@@ -71,6 +72,7 @@ DATA PROVIDED:
   fos                    # List all functions with locations
   fos find "^use.*"      # Filter functions by regex pattern
   fos info MiniProfile   # Show function details
+  fos type BotContext    # Show type definition with location
   fos read MiniProfile   # Generate sed command for function body
   fos analyze            # Show call frequency and dependency groups
   fos deps useAuth       # Show function dependencies
@@ -166,6 +168,15 @@ program
     cmdAI(options);
   });
 
+// Type command
+program
+  .command('type <typeName>')
+  .description('Show type definition')
+  .action((typeName) => {
+    analyze();
+    cmdType(typeName);
+  });
+
 
 // Analyze the TypeScript project
 function analyze() {
@@ -186,6 +197,7 @@ function analyze() {
   // Clear previous data
   functions.clear();
   modules.clear();
+  typeDefinitions.clear();
 
   // Analyze all source files
   const sourceFiles = project.getSourceFiles();
@@ -203,6 +215,9 @@ function analyze() {
 
     // Extract functions
     const extracted = extractFunctions(sourceFile, relativePath);
+
+    // Extract type definitions
+    extractTypeDefinitions(sourceFile, relativePath);
 
     // Store in registry
     extracted.forEach(func => {
@@ -273,6 +288,39 @@ function extractFunctions(sourceFile: SourceFile, filePath: string): FunctionInf
   });
 
   return results;
+}
+
+// Extract type definitions from a source file
+function extractTypeDefinitions(sourceFile: SourceFile, filePath: string): void {
+  // Extract interfaces
+  sourceFile.getInterfaces().forEach(interfaceDecl => {
+    const name = interfaceDecl.getName();
+    typeDefinitions.set(name, {
+      filePath,
+      line: interfaceDecl.getStartLineNumber(),
+      definition: interfaceDecl.getText().split('\n')[0] // Just the first line
+    });
+  });
+
+  // Extract type aliases
+  sourceFile.getTypeAliases().forEach(typeAlias => {
+    const name = typeAlias.getName();
+    typeDefinitions.set(name, {
+      filePath,
+      line: typeAlias.getStartLineNumber(),
+      definition: typeAlias.getText().split('\n')[0] // Just the first line
+    });
+  });
+
+  // Extract enums
+  sourceFile.getEnums().forEach(enumDecl => {
+    const name = enumDecl.getName();
+    typeDefinitions.set(name, {
+      filePath,
+      line: enumDecl.getStartLineNumber(),
+      definition: enumDecl.getText().split('\n')[0] // Just the first line
+    });
+  });
 }
 
 // Extract detailed function data
@@ -440,7 +488,7 @@ function cmdInfo(funcName: string) {
     });
   }
 
-  console.log(`\nReturns: ${func.returnType}`);
+  console.log(`\nReturns: ${formatType(func.returnType)}`);
 
   if (func.calls.length > 0) {
     console.log('\nCalls:');
@@ -802,7 +850,7 @@ function cmdAI(options: any) {
 
     console.log('## Exported API');
     moduleFuncs.filter(f => f.exported).forEach(f => {
-      console.log(`- **${f.name}**(${formatParams(f.params, true)}) → ${f.returnType}`);
+      console.log(`- **${f.name}**(${formatParams(f.params, true)}) → ${formatType(f.returnType)}`);
     });
 
     console.log('\n## Internal');
@@ -821,7 +869,7 @@ function cmdAI(options: any) {
 
     console.log(chalk.bold(`# Function: ${func.name}\n`));
     console.log(`**Location**: ${func.filePath}:${func.line}`);
-    console.log(`**Signature**: ${func.name}(${formatParams(func.params, true)}) → ${func.returnType}`);
+    console.log(`**Signature**: ${func.name}(${formatParams(func.params, true)}) → ${formatType(func.returnType)}`);
 
     if (func.calls.length > 0) {
       console.log(`\n**Dependencies**: ${func.calls.join(', ')}`);
@@ -848,6 +896,36 @@ function cmdAI(options: any) {
   }
 }
 
+// Command: Show type definition
+function cmdType(typeName: string) {
+  const typeDef = typeDefinitions.get(typeName);
+  
+  if (!typeDef) {
+    console.log(chalk.red(`Type "${typeName}" not found`));
+    return;
+  }
+  
+  console.log(chalk.bold(`\nType: ${typeName}`));
+  console.log('='.repeat(50));
+  console.log(`Location: ${typeDef.filePath}:${typeDef.line}`);
+  console.log(`Definition: ${typeDef.definition}`);
+  
+  const link = `file://${path.resolve(typeDef.filePath)}:${typeDef.line}:1`;
+  console.log(chalk.blue(`\nDirect Access: ${chalk.underline(link)}`));
+}
+
+// Helper: Format type with clickable links
+function formatType(type: string): string {
+  // Extract the main type name (ignore generics, arrays, etc.)
+  const mainType = type.replace(/[\[\]<>?|&]/g, ' ').split(' ')[0];
+  
+  if (typeDefinitions.has(mainType)) {
+    return type.replace(mainType, `#${mainType}`);
+  }
+  
+  return type;
+}
+
 // Helper: Format parameters
 function formatParams(params: FunctionInfo['params'], withTypes = false): string {
   if (params.length === 0) return '';
@@ -869,7 +947,7 @@ function formatParams(params: FunctionInfo['params'], withTypes = false): string
         const typeContent = p.type.replace(/^{\s*|\s*}$/g, '').trim();
         return typeContent;
       }
-      return `${p.name}: ${p.type}${p.optional ? '?' : ''}`;
+      return `${p.name}: ${formatType(p.type)}${p.optional ? '?' : ''}`;
     }
     return p.name;
   }).join(', ');
