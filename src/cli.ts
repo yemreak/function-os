@@ -34,9 +34,6 @@ interface FunctionInfo {
   }>;
   returnType: string;
   calls: string[];
-  complexity: number;
-  isComponent: boolean;
-  purpose: string;
 }
 
 // Global state
@@ -67,32 +64,21 @@ WORKFLOW:
 WHAT THE ANALYZER SHOWS:
 - Function locations (file:startLine-endLine)
 - Export status [Export] or [Internal]
-- Component markers [Component]
 - Function signatures and parameters
+- Function calls and dependencies
 
-PRACTICAL USAGE:
-
-Finding code:
-  fos find profile       # Shows profile-related functions
-  fos info MiniProfile   # Shows complexity score and details
-  fos read MiniProfile   # Outputs: sed -n '15,278p' src/components/MiniProfile.tsx
-
-Analyzing health:
-  fos analyze            # Shows single-use functions, highly complex functions, dead code
-
-Understanding connections:
-  fos deps useAuth       # Shows what useAuth calls and what calls useAuth
-
-TIME COMPARISON:
-- Reading files manually: 50+ minutes
-- Using FOS: 2 minutes
+DATA PROVIDED:
+  fos                    # List all functions with locations
+  fos find profile       # Filter functions by name pattern
+  fos info MiniProfile   # Show function details
+  fos read MiniProfile   # Generate sed command for function body
+  fos analyze            # Show call frequency and dependency groups
+  fos deps useAuth       # Show function dependencies
 
 CONSTRAINTS:
 - Requires TypeScript project with tsconfig.json
 - Functions must be named (anonymous functions excluded)
-- Analyzes .ts and .tsx files only
-
-VALIDATION: sed commands output exact function bodies for precise reading.`)
+- Analyzes .ts and .tsx files only`)
   .version('1.0.0');
 
 // Main list command (default)
@@ -100,7 +86,6 @@ program
   .command('list', { isDefault: true })
   .description('List all functions in the codebase')
   .option('-e, --exports', 'Show only exported functions')
-  .option('-c, --complex', 'Show only highly complex functions (complexity > 50)')
   .option('-m, --module <path>', 'Filter by module path')
   .action((options) => {
     analyze();
@@ -320,11 +305,6 @@ function extractFunctionData(
   // Extract function calls
   const calls = extractCalls(funcNode);
 
-  // Calculate complexity
-  const complexity = calculateComplexity(funcNode);
-
-  // Check if it's a React component
-  const isComponent = isReactComponent(funcNode, name);
 
   return {
     id: className ? `${filePath}:${className}.${name}` : `${filePath}:${name}`,
@@ -340,9 +320,6 @@ function extractFunctionData(
     params,
     returnType,
     calls,
-    complexity,
-    isComponent,
-    purpose: inferPurpose(name, calls, isComponent, returnType)
   };
 }
 
@@ -369,7 +346,7 @@ function extractCalls(node: any): string[] {
     body.forEachDescendant((child: any) => {
       if (Node.isCallExpression(child)) {
         const expr = child.getExpression();
-        
+
         // Handle dynamic imports: import('./module')
         if (expr.getText() === 'import') {
           const args = child.getArguments();
@@ -393,47 +370,8 @@ function extractCalls(node: any): string[] {
   return Array.from(calls);
 }
 
-// Calculate cyclomatic complexity
-function calculateComplexity(node: any): number {
-  let complexity = 1;
-  const body = node.getBody ? node.getBody() : node;
 
-  if (body && body.forEachDescendant) {
-    body.forEachDescendant((child: any) => {
-      if (Node.isIfStatement(child) ||
-          Node.isConditionalExpression(child) ||
-          Node.isForStatement(child) ||
-          Node.isWhileStatement(child) ||
-          Node.isDoStatement(child) ||
-          Node.isCaseClause(child)) {
-        complexity++;
-      }
-    });
-  }
 
-  return complexity;
-}
-
-// Check if function is a React component
-function isReactComponent(node: any, name: string): boolean {
-  if (!/^[A-Z]/.test(name)) return false;
-
-  const returnType = node.getReturnType ? node.getReturnType().getText() : '';
-  return returnType.includes('Element') || returnType.includes('ReactNode') || returnType.includes('JSX');
-}
-
-// Infer function purpose
-function inferPurpose(name: string, calls: string[], isComponent: boolean, returnType: string): string {
-  if (isComponent) return 'React component';
-  if (name.startsWith('use')) return 'React hook';
-  if (name.startsWith('get')) return 'Getter function';
-  if (name.startsWith('set')) return 'Setter function';
-  if (name.startsWith('handle')) return 'Event handler';
-  if (name.startsWith('on')) return 'Event callback';
-  if (calls.some(c => c.includes('supabase') || c.includes('fetch') || c.includes('axios'))) return 'API operation';
-  if (returnType.includes('Promise')) return 'Async operation';
-  return 'Utility function';
-}
 
 // Command: List all functions
 function cmdList(options: any) {
@@ -444,9 +382,6 @@ function cmdList(options: any) {
   // Apply filters
   if (options.exports) {
     filtered = filtered.filter(f => f.exported);
-  }
-  if (options.complex) {
-    filtered = filtered.filter(f => f.complexity > 50);
   }
   if (options.module) {
     filtered = filtered.filter(f => f.filePath.includes(options.module));
@@ -466,12 +401,10 @@ function cmdList(options: any) {
     console.log(chalk.gray('-'.repeat(50)));
 
     funcs.forEach(func => {
-      const icon = func.isComponent ? '[Component]' : func.async ? '[Async]' : '';
-      const exp = func.exported ? chalk.green('[Export]') : chalk.gray('[Internal]');
-      const complex = func.complexity > 50 ? chalk.red(' [Complex]') : '';
+      const exp = func.exported ? '[Export]' : '[Internal]';
       const paramDisplay = formatParams(func.params, true);
 
-      console.log(`${exp} ${icon} ${chalk.cyan(func.name)}(${paramDisplay})${complex}`);
+      console.log(`${exp} ${chalk.cyan(func.name)}(${paramDisplay})`);
       console.log(chalk.gray(`  ${func.filePath}:${func.line}-${func.endLine}`));
     });
   });
@@ -495,10 +428,8 @@ function cmdInfo(funcName: string) {
 
   const callers = findCallers(func.name);
 
-  console.log(`Type: ${func.exported ? 'Exported' : 'Internal'} ${func.isComponent ? 'Component' : func.async ? 'Async' : 'Function'}`);
-  console.log(`Purpose: ${func.purpose}`);
+  console.log(`Type: ${func.exported ? 'Exported' : 'Internal'} ${func.async ? 'Async' : ''} ${func.type}`);
   console.log(`Location: ${func.filePath}:${func.line}-${func.endLine} (${func.size} lines)`);
-  console.log(`Complexity: ${func.complexity} ${func.complexity > 50 ? '(Highly Complex)' : func.complexity > 20 ? '(Complex)' : func.complexity > 10 ? '(Moderate)' : '(Simple)'}`);
 
   if (func.params.length > 0) {
     console.log('\nParameters:');
@@ -644,27 +575,20 @@ function cmdStats() {
     hooks: 0,
     async: 0,
     exported: 0,
-    complex: 0,
-    totalSize: 0,
-    totalComplexity: 0
+    totalSize: 0
   };
 
   let largest: FunctionInfo | null = null;
-  let mostComplex: FunctionInfo | null = null;
   const callCounts = new Map<string, number>();
 
   functions.forEach(func => {
-    if (func.isComponent) stats.components++;
-    if (func.name.startsWith('use') && !func.isComponent) stats.hooks++;
+    if (func.name.startsWith('use')) stats.hooks++;
     if (func.async) stats.async++;
     if (func.exported) stats.exported++;
-    if (func.complexity > 50) stats.complex++;
 
     stats.totalSize += func.size;
-    stats.totalComplexity += func.complexity;
 
     if (!largest || func.size > largest.size) largest = func;
-    if (!mostComplex || func.complexity > mostComplex.complexity) mostComplex = func;
 
     func.calls.forEach(call => {
       callCounts.set(call, (callCounts.get(call) || 0) + 1);
@@ -672,19 +596,13 @@ function cmdStats() {
   });
 
   console.log(`Total Functions: ${stats.total}`);
-  console.log(`React Components: ${stats.components}`);
   console.log(`React Hooks: ${stats.hooks}`);
   console.log(`Async Functions: ${stats.async}`);
   console.log(`Exported: ${stats.exported}`);
-  console.log(`Highly Complex (>50): ${stats.complex}`);
   console.log(`\nAverage Size: ${Math.round(stats.totalSize / stats.total)} lines`);
-  console.log(`Average Complexity: ${(stats.totalComplexity / stats.total).toFixed(1)}`);
 
   if (largest) {
     console.log(`\nLargest: ${(largest as FunctionInfo).name} (${(largest as FunctionInfo).size} lines)`);
-  }
-  if (mostComplex) {
-    console.log(`Most Complex: ${(mostComplex as FunctionInfo).name} (${(mostComplex as FunctionInfo).complexity})`);
   }
 
   console.log('\nMost Called:');
@@ -713,80 +631,33 @@ function cmdAnalyze() {
     });
   });
 
-  const singleUse = Array.from(functions.values()).filter(f => {
-    const count = callCounts.get(f.name) || 0;
-    return count === 1 && !f.exported && !f.isComponent;
+  // Call frequency data
+  console.log('\nCall Frequency:');
+  const sortedCalls = Array.from(callCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20);
+
+  sortedCalls.forEach(([name, count]) => {
+    const func = Array.from(functions.values()).find(f => f.name === name);
+    if (func) {
+      console.log(`${name}: ${count} calls`);
+    }
   });
-
-  if (singleUse.length > 0) {
-    console.log('\nSingle-Use Functions (consider inlining):');
-    singleUse.forEach(func => {
-      const caller = findCallers(func.name)[0];
-      console.log(`- ${func.name} (${func.filePath}:${func.line})`);
-      if (caller) console.log(`  Only called by: ${caller.name}`);
-    });
-  }
-
-  // Find overly popular functions
-  const popular = Array.from(callCounts.entries())
-    .filter(([, count]) => count > 5)
-    .sort((a, b) => b[1] - a[1]);
-
-  if (popular.length > 0) {
-    console.log('\nHighly Connected Functions (potential refactoring targets):');
-    popular.forEach(([name, count]) => {
-      const func = Array.from(functions.values()).find(f => f.name === name);
-      if (func) {
-        console.log(`- ${name} called ${count} times`);
-        const callers = findCallers(name);
-        const modules = new Set(callers.map(c => path.dirname(c.filePath)));
-        if (modules.size > 3) {
-          console.log(`  WARNING: Called from ${modules.size} different modules`);
-        }
-      }
-    });
-  }
-
-  // Find highly complex functions
-  const complex = Array.from(functions.values())
-    .filter(f => f.complexity > 50)
-    .sort((a, b) => b.complexity - a.complexity);
-
-  if (complex.length > 0) {
-    console.log('\nHighly Complex Functions (consider breaking down):');
-    complex.slice(0, 5).forEach(func => {
-      console.log(`- ${func.name} (complexity: ${func.complexity})`);
-      console.log(`  ${func.filePath}:${func.line}-${func.endLine}`);
-    });
-  }
-
-  // Find disconnected functions (only show exported functions that are unused)
-  const disconnected = Array.from(functions.values()).filter(f => {
-    const calledCount = callCounts.get(f.name) || 0;
-    return calledCount === 0 && f.calls.length === 0 && f.exported && !f.isComponent;
-  });
-
-  if (disconnected.length > 0) {
-    console.log('\nDisconnected Functions (dead code?):');
-    disconnected.forEach(func => {
-      console.log(`- ${func.name} (${func.filePath}:${func.line})`);
-    });
-  }
 
   // Dependency Graph Analysis
   console.log('\nDependency Graph Analysis:');
   console.log('='.repeat(50));
-  
+
   // Build adjacency list for the dependency graph
   const graph = new Map<string, Set<string>>();
   const reverseGraph = new Map<string, Set<string>>();
-  
+
   // Initialize graph nodes
   functions.forEach(func => {
     graph.set(func.name, new Set());
     reverseGraph.set(func.name, new Set());
   });
-  
+
   // Build edges
   functions.forEach(func => {
     func.calls.forEach(calledName => {
@@ -797,22 +668,22 @@ function cmdAnalyze() {
       }
     });
   });
-  
+
   // Find connected components using DFS
   const visited = new Set<string>();
   const components: string[][] = [];
-  
+
   function dfs(node: string, component: string[]) {
     if (visited.has(node)) return;
     visited.add(node);
     component.push(node);
-    
+
     // Visit nodes this function calls
     graph.get(node)?.forEach(child => dfs(child, component));
     // Visit nodes that call this function
     reverseGraph.get(node)?.forEach(parent => dfs(parent, component));
   }
-  
+
   // Find all connected components
   functions.forEach(func => {
     if (!visited.has(func.name)) {
@@ -823,29 +694,29 @@ function cmdAnalyze() {
       }
     }
   });
-  
+
   // Sort components by size
   components.sort((a, b) => b.length - a.length);
-  
+
   console.log(`\nFound ${components.length} dependency groups:`);
-  
+
   // Display each component
   components.forEach((component, idx) => {
     console.log(`\n${chalk.yellow(`Group ${idx + 1}`)} (${component.length} functions):`);
-    
+
     // Count total edges in this component
     let edgeCount = 0;
     component.forEach(funcName => {
       edgeCount += graph.get(funcName)?.size || 0;
     });
-    
+
     console.log(`Total relationships: ${edgeCount}`);
-    
+
     // Show the functions and their connections
     component.slice(0, 10).forEach(funcName => {
       const calls = Array.from(graph.get(funcName) || []).filter(n => component.includes(n));
       const calledBy = Array.from(reverseGraph.get(funcName) || []).filter(n => component.includes(n));
-      
+
       console.log(`  ${chalk.cyan(funcName)}`);
       if (calls.length > 0) {
         console.log(`    → calls: ${calls.join(', ')}`);
@@ -854,12 +725,12 @@ function cmdAnalyze() {
         console.log(`    ← called by: ${calledBy.join(', ')}`);
       }
     });
-    
+
     if (component.length > 10) {
       console.log(`  ... and ${component.length - 10} more functions`);
     }
   });
-  
+
   // Show isolated functions count
   const isolatedCount = functions.size - visited.size;
   if (isolatedCount > 0) {
@@ -889,7 +760,7 @@ function cmdRead(functionNames: string[]) {
   console.log('Run these commands in parallel to read function bodies:\n');
 
   funcsToRead.forEach(func => {
-    console.log(chalk.gray(`# ${func.name} (${func.purpose})`));
+    console.log(chalk.gray(`# ${func.name}`));
     console.log(`sed -n '${func.line},${func.endLine}p' ${func.filePath}`);
     console.log();
   });
@@ -917,7 +788,7 @@ function cmdAI(options: any) {
 
     console.log('\n## Internal');
     moduleFuncs.filter(f => !f.exported).forEach(f => {
-      console.log(`- ${f.name}() - ${f.purpose}`);
+      console.log(`- ${f.name}()`);
     });
   } else if (options.function) {
     const func = Array.from(functions.values()).find(f =>
@@ -930,7 +801,6 @@ function cmdAI(options: any) {
     }
 
     console.log(chalk.bold(`# Function: ${func.name}\n`));
-    console.log(`**Purpose**: ${func.purpose}`);
     console.log(`**Location**: ${func.filePath}:${func.line}`);
     console.log(`**Signature**: ${func.name}(${formatParams(func.params, true)}) → ${func.returnType}`);
 
@@ -941,18 +811,19 @@ function cmdAI(options: any) {
     console.log(chalk.bold('# Function Overview\n'));
     console.log(`Total: ${functions.size} functions\n`);
 
-    const byPurpose = new Map<string, FunctionInfo[]>();
-    functions.forEach(f => {
-      if (!byPurpose.has(f.purpose)) byPurpose.set(f.purpose, []);
-      byPurpose.get(f.purpose)!.push(f);
-    });
-
-    byPurpose.forEach((funcs, purpose) => {
-      console.log(`## ${purpose} (${funcs.length})`);
-      funcs.slice(0, 5).forEach(f => {
-        console.log(`- ${f.name}() - ${path.basename(f.filePath)}`);
+    // List functions by module
+    console.log('## Functions by Module\n');
+    modules.forEach((funcIds, modulePath) => {
+      console.log(`### ${modulePath}`);
+      funcIds.slice(0, 10).forEach(id => {
+        const func = functions.get(id);
+        if (func) {
+          console.log(`- ${func.name}()`);
+        }
       });
-      if (funcs.length > 5) console.log(`- ... and ${funcs.length - 5} more`);
+      if (funcIds.length > 10) {
+        console.log(`- ... and ${funcIds.length - 10} more`);
+      }
       console.log();
     });
   }
