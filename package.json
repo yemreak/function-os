@@ -1,0 +1,39 @@
+{
+  "name": "function-os",
+  "version": "1.0.0",
+  "description": "Function Operating System - A TypeScript analyzer for AI-driven development",
+  "main": "dist/cli.js",
+  "bin": {
+    "fos": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/cli.ts",
+    "prepublishOnly": "npm run build",
+    "postinstall": "npm run build"
+  },
+  "keywords": [
+    "typescript",
+    "analyzer",
+    "cli",
+    "ai",
+    "development",
+    "function",
+    "analysis"
+  ],
+  "author": "yemreak",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^14.0.0",
+    "ts-morph": "^26.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
