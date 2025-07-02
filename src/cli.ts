@@ -181,6 +181,7 @@ program
     cmdAI(options);
   });
 
+
 // Analyze the TypeScript project
 function analyze() {
   console.log(chalk.gray('Analyzing TypeScript codebase...'));
