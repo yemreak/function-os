@@ -38,7 +38,7 @@ From this single line, we learn:
 - **HOW**: `[Async]` tag and complexity markers reveal implementation style
 - **WHY**: Inferred from name pattern and return type
 
-## The Vision: 25x Faster AI Development
+## The Vision: Faster AI Development
 
 **Problem**: AI agents waste time reading entire files to understand codebases
 **Solution**: Treat functions as first-class citizens that can be queried and understood individually
@@ -259,7 +259,7 @@ Because cognitive load kills productivity. When you see:
 
 Your brain instantly knows this is an exported async function that validates users. No translation needed.
 
-### Why 25x Faster?
+### Why Faster?
 
 **Math**:
 
@@ -293,7 +293,7 @@ You're not just using a tool. You're adopting a new way of thinking about code. 
 
 - You'll never again waste time reading irrelevant code
 - You'll spot architectural issues in seconds
-- You'll understand new codebases 25x faster
+- You'll understand new codebases faster
 - You'll make better decisions about where code belongs
 
 Remember: **Functions are citizens. Treat them with the respect and precision they deserve.**
@@ -414,7 +414,7 @@ Because every human interaction answers these:
 
 But showing the questions is like showing the skeleton. We want the living being.
 
-### Why 25x Faster?
+### Why Faster?
 
 Because we're solving the right problem:
 

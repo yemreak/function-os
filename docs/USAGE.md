@@ -275,7 +275,7 @@ With TypeScript Analyzer:
 - Making decisions: 1 minute
 - **Total: 2 minutes**
 
-**25x faster with better understanding!**
+**faster with better understanding!**
 
 ## Remember
 

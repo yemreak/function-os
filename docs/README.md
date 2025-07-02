@@ -1,6 +1,6 @@
 # Function Operating System (FOS)
 
-A TypeScript analyzer designed for AI-driven development. Analyze TypeScript codebases 25x faster than traditional file reading.
+A TypeScript analyzer designed for AI-driven development. Analyze TypeScript codebases faster than traditional file reading.
 
 ## Installation
 
@@ -114,7 +114,7 @@ This tells you:
 
 ## Features
 
-- **25x faster** than reading files
+- **faster** than reading files
 - **Zero configuration** - works with any TypeScript project
 - **AI-optimized** output format
 - **Surgical precision** - read only the functions you need
