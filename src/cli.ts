@@ -49,7 +49,50 @@ const program = new Command();
 
 program
   .name('fos')
-  .description('Function Operating System - Analyze TypeScript codebases efficiently')
+  .description(`Function Operating System - TypeScript Analyzer for AI Agents
+
+CONTEXT: AI agents need to understand TypeScript codebases without reading entire files.
+
+INTENTION: → Enable surgical code reading through function-level analysis.
+
+WORKFLOW:
+
+  fos                    # Lists all functions with locations (30 seconds)
+  fos find auth          # Filters functions by pattern (10 seconds)
+  fos analyze            # Identifies inefficiencies (20 seconds)
+  fos read func1 func2   # Generates sed commands for specific functions (1 minute)
+  fos deps useAuth       # Shows function dependencies (10 seconds)
+  fos info CTASection    # Displays function details (when needed)
+
+WHAT THE ANALYZER SHOWS:
+- Function locations (file:startLine-endLine)
+- Export status [Export] or [Internal]
+- Component markers [Component]
+- Function signatures and parameters
+
+PRACTICAL USAGE:
+
+Finding code:
+  fos find profile       # Shows profile-related functions
+  fos info MiniProfile   # Shows complexity score and details
+  fos read MiniProfile   # Outputs: sed -n '15,278p' src/components/MiniProfile.tsx
+
+Analyzing health:
+  fos analyze            # Shows single-use functions, highly complex functions, dead code
+
+Understanding connections:
+  fos deps useAuth       # Shows what useAuth calls and what calls useAuth
+
+TIME COMPARISON:
+- Reading files manually: 50+ minutes
+- Using FOS: 2 minutes
+
+CONSTRAINTS:
+- Requires TypeScript project with tsconfig.json
+- Functions must be named (anonymous functions excluded)
+- Analyzes .ts and .tsx files only
+
+VALIDATION: sed commands output exact function bodies for precise reading.`)
   .version('1.0.0');
 
 // Main list command (default)
@@ -57,7 +100,7 @@ program
   .command('list', { isDefault: true })
   .description('List all functions in the codebase')
   .option('-e, --exports', 'Show only exported functions')
-  .option('-c, --complex', 'Show only complex functions (complexity > 10)')
+  .option('-c, --complex', 'Show only highly complex functions (complexity > 50)')
   .option('-m, --module <path>', 'Filter by module path')
   .action((options) => {
     analyze();
@@ -394,7 +437,7 @@ function cmdList(options: any) {
     filtered = filtered.filter(f => f.exported);
   }
   if (options.complex) {
-    filtered = filtered.filter(f => f.complexity > 10);
+    filtered = filtered.filter(f => f.complexity > 50);
   }
   if (options.module) {
     filtered = filtered.filter(f => f.filePath.includes(options.module));
@@ -416,7 +459,7 @@ function cmdList(options: any) {
     funcs.forEach(func => {
       const icon = func.isComponent ? '[Component]' : func.async ? '[Async]' : '';
       const exp = func.exported ? chalk.green('[Export]') : chalk.gray('[Internal]');
-      const complex = func.complexity > 10 ? chalk.red(' [Complex]') : '';
+      const complex = func.complexity > 50 ? chalk.red(' [Complex]') : '';
       const paramDisplay = formatParams(func.params, true);
 
       console.log(`${exp} ${icon} ${chalk.cyan(func.name)}(${paramDisplay})${complex}`);
@@ -446,7 +489,7 @@ function cmdInfo(funcName: string) {
   console.log(`Type: ${func.exported ? 'Exported' : 'Internal'} ${func.isComponent ? 'Component' : func.async ? 'Async' : 'Function'}`);
   console.log(`Purpose: ${func.purpose}`);
   console.log(`Location: ${func.filePath}:${func.line}-${func.endLine} (${func.size} lines)`);
-  console.log(`Complexity: ${func.complexity} ${func.complexity > 10 ? '(Complex)' : func.complexity > 5 ? '(Moderate)' : '(Simple)'}`);
+  console.log(`Complexity: ${func.complexity} ${func.complexity > 50 ? '(Highly Complex)' : func.complexity > 20 ? '(Complex)' : func.complexity > 10 ? '(Moderate)' : '(Simple)'}`);
 
   if (func.params.length > 0) {
     console.log('\nParameters:');
@@ -606,7 +649,7 @@ function cmdStats() {
     if (func.name.startsWith('use') && !func.isComponent) stats.hooks++;
     if (func.async) stats.async++;
     if (func.exported) stats.exported++;
-    if (func.complexity > 10) stats.complex++;
+    if (func.complexity > 50) stats.complex++;
 
     stats.totalSize += func.size;
     stats.totalComplexity += func.complexity;
@@ -624,7 +667,7 @@ function cmdStats() {
   console.log(`React Hooks: ${stats.hooks}`);
   console.log(`Async Functions: ${stats.async}`);
   console.log(`Exported: ${stats.exported}`);
-  console.log(`Complex (>10): ${stats.complex}`);
+  console.log(`Highly Complex (>50): ${stats.complex}`);
   console.log(`\nAverage Size: ${Math.round(stats.totalSize / stats.total)} lines`);
   console.log(`Average Complexity: ${(stats.totalComplexity / stats.total).toFixed(1)}`);
 
@@ -695,13 +738,13 @@ function cmdAnalyze() {
     });
   }
 
-  // Find complex functions
+  // Find highly complex functions
   const complex = Array.from(functions.values())
-    .filter(f => f.complexity > 10)
+    .filter(f => f.complexity > 50)
     .sort((a, b) => b.complexity - a.complexity);
 
   if (complex.length > 0) {
-    console.log('\nComplex Functions (consider breaking down):');
+    console.log('\nHighly Complex Functions (consider breaking down):');
     complex.slice(0, 5).forEach(func => {
       console.log(`- ${func.name} (complexity: ${func.complexity})`);
       console.log(`  ${func.filePath}:${func.line}-${func.endLine}`);
