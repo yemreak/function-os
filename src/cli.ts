@@ -369,7 +369,15 @@ function extractCalls(node: any): string[] {
     body.forEachDescendant((child: any) => {
       if (Node.isCallExpression(child)) {
         const expr = child.getExpression();
-        if (Node.isIdentifier(expr)) {
+        
+        // Handle dynamic imports: import('./module')
+        if (expr.getText() === 'import') {
+          const args = child.getArguments();
+          if (args.length > 0) {
+            const importPath = args[0].getText().replace(/['"]/g, '');
+            calls.add(`import(${importPath})`);
+          }
+        } else if (Node.isIdentifier(expr)) {
           calls.add(expr.getText());
         } else if (Node.isPropertyAccessExpression(expr)) {
           const obj = expr.getExpression();
