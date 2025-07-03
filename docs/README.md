@@ -1,6 +1,6 @@
 # Function Operating System (FOS)
 
-**Built by AI for AI** - Eliminates function discovery pain for NADRAI agents and developers. Understand TypeScript codebases 95% faster through function relationships.
+**Built by AI for AI** - Eliminates function discovery pain for AI agents and developers. Understand TypeScript codebases 95% faster through function relationships.
 
 ## Installation
 
@@ -127,7 +127,7 @@ This tells you:
 
 ## Philosophy
 
-**Customer Pain → Solution** - NADRAI agents report navigation pains, we eliminate them. No features without proven pain points.
+**Customer Pain → Solution** - AI agents report navigation pains, we eliminate them. No features without proven pain points.
 
 Functions are citizens in a universe. FOS eliminates the cognitive overhead of file navigation, letting AI agents understand codebases through relationships, not hierarchies.
 
