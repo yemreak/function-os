@@ -12,6 +12,8 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
+import * as https from 'https';
 import { Node, Project, SourceFile } from 'ts-morph';
 
 // Types
@@ -34,6 +36,7 @@ interface FunctionInfo {
   }>;
   returnType: string;
   calls: string[];
+  complexity: number;
 }
 
 // Global state
@@ -209,6 +212,16 @@ program
   .action((typeName) => {
     analyze();
     cmdType(typeName);
+  });
+
+// Analyze GitHub repo command
+program
+  .command('analyze-repo <github-url>')
+  .description('Analyze TypeScript functions in a GitHub repository')
+  .option('-d, --depth <number>', 'Maximum files to analyze', '100')
+  .option('-b, --branch <branch>', 'Branch to analyze', 'main')
+  .action((githubUrl, options) => {
+    cmdAnalyzeRepo(githubUrl, options);
   });
 
 
@@ -387,6 +400,8 @@ function extractFunctionData(
   // Extract function calls
   const calls = extractCalls(funcNode);
 
+  // Calculate complexity (simple metric: number of calls + number of lines / 10)
+  const complexity = calls.length + Math.floor((node.getEndLineNumber() - node.getStartLineNumber()) / 10);
 
   return {
     id: className ? `${filePath}:${className}.${name}` : `${filePath}:${name}`,
@@ -402,6 +417,7 @@ function extractFunctionData(
     params,
     returnType,
     calls,
+    complexity,
   };
 }
 
@@ -1215,6 +1231,285 @@ function generateDotGraph(funcName?: string) {
   });
   
   console.log('}');
+}
+
+// Command: Analyze GitHub repository
+async function cmdAnalyzeRepo(githubUrl: string, options: any) {
+  console.log(chalk.bold(`\nAnalyzing GitHub Repository: ${githubUrl}`));
+  console.log('='.repeat(70));
+  
+  try {
+    // Parse GitHub URL
+    const repoInfo = parseGitHubUrl(githubUrl);
+    if (!repoInfo) {
+      console.log(chalk.red('Invalid GitHub URL format. Use: https://github.com/owner/repo'));
+      return;
+    }
+    
+    const { owner, repo } = repoInfo;
+    const branch = options.branch || 'main';
+    const maxFiles = parseInt(options.depth || '100');
+    
+    console.log(chalk.gray(`Repository: ${owner}/${repo}`));
+    console.log(chalk.gray(`Branch: ${branch}`));
+    console.log(chalk.gray(`Max files: ${maxFiles}`));
+    console.log('');
+    
+    // Create temporary directory
+    const tempDir = path.join(os.tmpdir(), `fos-${owner}-${repo}-${Date.now()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+    
+    console.log(chalk.yellow('→ Fetching TypeScript files from GitHub...'));
+    
+    // Fetch repository structure
+    const files = await fetchRepoFiles(owner, repo, branch, maxFiles);
+    
+    if (files.length === 0) {
+      console.log(chalk.red('No TypeScript files found in repository'));
+      cleanup(tempDir);
+      return;
+    }
+    
+    console.log(chalk.gray(`Found ${files.length} TypeScript files`));
+    
+    // Create temporary project structure
+    console.log(chalk.yellow('→ Creating temporary project...'));
+    await createTempProject(tempDir, files);
+    
+    // Create minimal tsconfig.json
+    const tsConfigPath = path.join(tempDir, 'tsconfig.json');
+    fs.writeFileSync(tsConfigPath, JSON.stringify({
+      compilerOptions: {
+        target: "ES2020",
+        module: "commonjs",
+        strict: false,
+        skipLibCheck: true
+      },
+      include: ["**/*.ts", "**/*.tsx"]
+    }, null, 2));
+    
+    // Analyze the temporary project
+    console.log(chalk.yellow('→ Running FOS analysis...'));
+    const originalCwd = process.cwd();
+    
+    try {
+      process.chdir(tempDir);
+      
+      // Initialize project for analysis
+      const tempProject = new Project({
+        tsConfigFilePath: tsConfigPath
+      });
+      
+      // Clear previous data and analyze
+      functions.clear();
+      modules.clear();
+      typeDefinitions.clear();
+      
+      const sourceFiles = tempProject.getSourceFiles();
+      let totalFunctions = 0;
+      
+      sourceFiles.forEach(sourceFile => {
+        const filePath = sourceFile.getFilePath();
+        const relativePath = path.relative(tempDir, filePath);
+        
+        const extracted = extractFunctions(sourceFile, relativePath);
+        totalFunctions += extracted.length;
+        
+        extracted.forEach(func => {
+          functions.set(func.id, func);
+        });
+        
+        extractTypeDefinitions(sourceFile, relativePath);
+      });
+      
+      // Show results
+      console.log(chalk.green('\\n✓ Analysis complete!'));
+      console.log(chalk.bold(`\\nRepository Analysis: ${owner}/${repo}`));
+      console.log('='.repeat(50));
+      console.log(`Total TypeScript files: ${sourceFiles.length}`);
+      console.log(`Total functions found: ${totalFunctions}`);
+      console.log(`Total types found: ${typeDefinitions.size}`);
+      
+      // Show top-level structure
+      const moduleGroups = new Map<string, number>();
+      functions.forEach(func => {
+        const moduleDir = path.dirname(func.filePath);
+        const topLevel = moduleDir.split('/')[0] || '.';
+        moduleGroups.set(topLevel, (moduleGroups.get(topLevel) || 0) + 1);
+      });
+      
+      console.log('\\nFunction distribution:');
+      Array.from(moduleGroups.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .forEach(([module, count]) => {
+          console.log(`  ${chalk.cyan(module)}: ${count} functions`);
+        });
+      
+      // Show most complex functions
+      const complexFunctions = Array.from(functions.values())
+        .filter(f => f.complexity > 5)
+        .sort((a, b) => b.complexity - a.complexity)
+        .slice(0, 5);
+      
+      if (complexFunctions.length > 0) {
+        console.log('\\nMost complex functions:');
+        complexFunctions.forEach(func => {
+          console.log(`  ${chalk.yellow(func.name)} (complexity: ${func.complexity}) - ${func.filePath}`);
+        });
+      }
+      
+      // Show exported functions
+      const exportedFunctions = Array.from(functions.values()).filter(f => f.exported);
+      console.log(`\\nExported functions: ${exportedFunctions.length}`);
+      
+      console.log(chalk.gray('\\nUse regular fos commands to explore further in this temporary workspace.'));
+      console.log(chalk.gray(`Temp directory: ${tempDir}`));
+      
+    } finally {
+      process.chdir(originalCwd);
+    }
+    
+  } catch (error) {
+    console.log(chalk.red(`Error analyzing repository: ${error}`));
+  }
+}
+
+// Helper: Parse GitHub URL
+function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
+  const patterns = [
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/.*)?$/,
+    /^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      return { owner: match[1], repo: match[2] };
+    }
+  }
+  
+  return null;
+}
+
+// Helper: Fetch repository files from GitHub API
+async function fetchRepoFiles(owner: string, repo: string, branch: string, maxFiles: number): Promise<Array<{path: string, content: string}>> {
+  return new Promise((resolve, reject) => {
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+    
+    https.get(apiUrl, {
+      headers: {
+        'User-Agent': 'fos-cli',
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    }, (res) => {
+      let data = '';
+      
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      res.on('end', async () => {
+        try {
+          const response = JSON.parse(data);
+          
+          if (!response.tree) {
+            reject(new Error('Repository not found or branch not found'));
+            return;
+          }
+          
+          // Filter TypeScript files
+          const tsFiles = response.tree
+            .filter((item: any) => 
+              item.type === 'blob' && 
+              (item.path.endsWith('.ts') || item.path.endsWith('.tsx')) &&
+              !item.path.includes('node_modules') &&
+              !item.path.includes('.d.ts')
+            )
+            .slice(0, maxFiles);
+          
+          console.log(chalk.gray(`Downloading ${tsFiles.length} files...`));
+          
+          // Fetch file contents
+          const files = [];
+          for (const file of tsFiles) {
+            try {
+              const content = await fetchFileContent(owner, repo, file.path, branch);
+              files.push({ path: file.path, content });
+              
+              if (files.length % 10 === 0) {
+                console.log(chalk.gray(`Downloaded ${files.length}/${tsFiles.length} files...`));
+              }
+            } catch (error) {
+              console.log(chalk.yellow(`Warning: Could not fetch ${file.path}`));
+            }
+          }
+          
+          resolve(files);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+// Helper: Fetch individual file content
+function fetchFileContent(owner: string, repo: string, filePath: string, branch: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`;
+    
+    https.get(apiUrl, {
+      headers: {
+        'User-Agent': 'fos-cli',
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    }, (res) => {
+      let data = '';
+      
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(data);
+          
+          if (response.content) {
+            const content = Buffer.from(response.content, 'base64').toString('utf-8');
+            resolve(content);
+          } else {
+            reject(new Error('No content found'));
+          }
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+// Helper: Create temporary project structure
+async function createTempProject(tempDir: string, files: Array<{path: string, content: string}>) {
+  for (const file of files) {
+    const fullPath = path.join(tempDir, file.path);
+    const dir = path.dirname(fullPath);
+    
+    // Create directory structure
+    fs.mkdirSync(dir, { recursive: true });
+    
+    // Write file content
+    fs.writeFileSync(fullPath, file.content);
+  }
+}
+
+// Helper: Cleanup temporary directory
+function cleanup(tempDir: string) {
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  } catch (error) {
+    console.log(chalk.yellow(`Warning: Could not cleanup temporary directory: ${tempDir}`));
+  }
 }
 
 // Parse command line arguments
