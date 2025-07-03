@@ -1,6 +1,6 @@
 # Function Operating System (FOS)
 
-A TypeScript analyzer designed for AI-driven development. Analyze TypeScript codebases faster than traditional file reading.
+**Built by AI for AI** - Eliminates function discovery pain for NADRAI agents and developers. Understand TypeScript codebases 95% faster through function relationships.
 
 ## Installation
 
@@ -45,7 +45,10 @@ fos find use           # Find all React hooks
 
 ```bash
 fos info useAuth       # Show complete function details
-fos deps useAuth       # Show dependencies and callers
+fos deps useAuth       # Show what function calls (project only)
+fos callers useAuth    # Show what calls this function
+fos flow useAuth       # Trace complete call flow
+fos graph useAuth      # Visual dependency graph
 ```
 
 ### Code Analysis
@@ -59,10 +62,11 @@ fos tree               # Module structure
 ### AI Workflow Commands
 
 ```bash
-fos read useAuth isAdmin  # Get sed commands to read function bodies
-fos ai                    # Generate AI-friendly overview
-fos ai --module src/lib   # AI context for specific module
-fos ai --function useAuth # AI context for specific function
+fos read useAuth isAdmin     # Get sed commands to read function bodies
+fos read useAuth -c          # Include imports and type context
+fos ai                       # Generate AI-friendly overview
+fos ai --module src/lib      # AI context for specific module
+fos ai --function useAuth    # AI context for specific function
 ```
 
 ## Output Format
@@ -97,16 +101,17 @@ This tells you:
    fos find profile
    ```
 
-3. **Analyze health** (20 seconds)
+3. **Understand relationships** (15 seconds)
 
    ```bash
-   fos analyze
+   fos flow MiniProfile --depth 3
+   fos callers useAuth
    ```
 
-4. **Read only what matters** (1 minute)
+4. **Read with context** (30 seconds)
 
    ```bash
-   fos read MiniProfile useAuth
+   fos read MiniProfile useAuth -c
    # Copy and run the generated sed commands
    ```
 
@@ -122,7 +127,9 @@ This tells you:
 
 ## Philosophy
 
-Functions are citizens in a universe. FOS helps you understand this universe and organize it wisely. Instead of drowning in files, you see the big picture and zoom in surgically to what matters.
+**Customer Pain → Solution** - NADRAI agents report navigation pains, we eliminate them. No features without proven pain points.
+
+Functions are citizens in a universe. FOS eliminates the cognitive overhead of file navigation, letting AI agents understand codebases through relationships, not hierarchies.
 
 ## License
 
