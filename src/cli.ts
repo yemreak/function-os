@@ -76,6 +76,10 @@ DATA PROVIDED:
   fos read MiniProfile   # Generate sed command for function body
   fos analyze            # Show call frequency and dependency groups
   fos deps useAuth       # Show function dependencies
+  fos callers useAuth    # Show functions that call this function  
+  fos flow useAuth       # Show complete call flow
+  fos graph useAuth      # Show dependency graph
+  fos read useAuth -c    # Read with imports/context
 
 CONSTRAINTS:
 - Requires TypeScript project with tsconfig.json
@@ -121,6 +125,35 @@ program
     cmdDeps(functionName);
   });
 
+// Callers command
+program
+  .command('callers <function>')
+  .description('Show functions that call this function')
+  .action((functionName) => {
+    analyze();
+    cmdCallers(functionName);
+  });
+
+// Flow command
+program
+  .command('flow <function>')
+  .description('Show complete call flow from this function')
+  .option('-d, --depth <number>', 'Maximum depth to trace', '3')
+  .action((functionName, options) => {
+    analyze();
+    cmdFlow(functionName, options);
+  });
+
+// Graph command
+program
+  .command('graph [function]')
+  .description('Show visual dependency graph')
+  .option('-f, --format <format>', 'Output format (text|mermaid|dot)', 'text')
+  .action((functionName, options) => {
+    analyze();
+    cmdGraph(functionName, options);
+  });
+
 // Tree command
 program
   .command('tree')
@@ -152,9 +185,10 @@ program
 program
   .command('read <functions...>')
   .description('Generate commands to read specific function bodies')
-  .action((functionNames) => {
+  .option('-c, --with-context', 'Include imports and type context')
+  .action((functionNames, options) => {
     analyze();
-    cmdRead(functionNames);
+    cmdRead(functionNames, options);
   });
 
 // AI command
@@ -571,15 +605,16 @@ function cmdDeps(funcName: string) {
   console.log('='.repeat(50));
 
   console.log('\nCalls:');
-  if (func.calls.length === 0) {
+  const projectCalls = func.calls.filter(call => 
+    Array.from(functions.values()).find(f => f.name === call)
+  );
+  if (projectCalls.length === 0) {
     console.log('  (none)');
   } else {
-    func.calls.forEach(call => {
+    projectCalls.forEach(call => {
       const calledFunc = Array.from(functions.values()).find(f => f.name === call);
       if (calledFunc) {
         console.log(`  - ${call} (${path.basename(calledFunc.filePath)}:${calledFunc.line})`);
-      } else {
-        console.log(`  - ${call} (external)`);
       }
     });
   }
@@ -806,7 +841,7 @@ function cmdAnalyze() {
 }
 
 // Command: Generate read commands
-function cmdRead(functionNames: string[]) {
+function cmdRead(functionNames: string[], options?: any) {
   const funcsToRead: FunctionInfo[] = [];
 
   functionNames.forEach(name => {
@@ -824,17 +859,30 @@ function cmdRead(functionNames: string[]) {
 
   console.log(chalk.bold('\nFunction Read Commands:'));
   console.log('='.repeat(50));
-  console.log('Run these commands in parallel to read function bodies:\n');
+  
+  if (options?.withContext) {
+    console.log('Reading functions with import context:\n');
+    
+    funcsToRead.forEach(func => {
+      console.log(chalk.gray(`# ${func.name} with imports`));
+      console.log(`echo "=== ${func.name} imports ===" && head -20 ${func.filePath} | grep -E "^import|^export" && echo && echo "=== ${func.name} function ===" && sed -n '${func.line},${func.endLine}p' ${func.filePath}`);
+      console.log();
+    });
+  } else {
+    console.log('Run these commands in parallel to read function bodies:\n');
 
-  funcsToRead.forEach(func => {
-    console.log(chalk.gray(`# ${func.name}`));
-    console.log(`sed -n '${func.line},${func.endLine}p' ${func.filePath}`);
-    console.log();
-  });
+    funcsToRead.forEach(func => {
+      console.log(chalk.gray(`# ${func.name}`));
+      console.log(`sed -n '${func.line},${func.endLine}p' ${func.filePath}`);
+      console.log();
+    });
+  }
 
   console.log('Or read all at once:');
   const combined = funcsToRead.map(f =>
-    `echo "=== ${f.name} ===" && sed -n '${f.line},${f.endLine}p' ${f.filePath}`
+    options?.withContext 
+      ? `echo "=== ${f.name} ===" && head -20 ${f.filePath} | grep -E "^import|^export" && echo && sed -n '${f.line},${f.endLine}p' ${f.filePath}`
+      : `echo "=== ${f.name} ===" && sed -n '${f.line},${f.endLine}p' ${f.filePath}`
   ).join(' && echo && ');
   console.log(combined);
 }
@@ -955,6 +1003,207 @@ function findCallers(funcName: string): FunctionInfo[] {
     }
   });
   return callers;
+}
+
+// Command: Show callers only
+function cmdCallers(funcName: string) {
+  const func = Array.from(functions.values()).find(f =>
+    f.name === funcName || f.id.endsWith(`:${funcName}`)
+  );
+
+  if (!func) {
+    console.log(chalk.red(`Function "${funcName}" not found`));
+    return;
+  }
+
+  const callers = findCallers(func.name);
+  console.log(chalk.bold(`\nFunctions calling: ${func.name}`));
+  console.log('='.repeat(50));
+
+  if (callers.length === 0) {
+    console.log('  (none)');
+  } else {
+    callers.forEach(caller => {
+      console.log(`  → ${caller.name} (${path.basename(caller.filePath)}:${caller.line})`);
+    });
+  }
+}
+
+// Command: Show complete call flow
+function cmdFlow(funcName: string, options: any) {
+  const func = Array.from(functions.values()).find(f =>
+    f.name === funcName || f.id.endsWith(`:${funcName}`)
+  );
+
+  if (!func) {
+    console.log(chalk.red(`Function "${funcName}" not found`));
+    return;
+  }
+
+  const depth = parseInt(options.depth || '3');
+  console.log(chalk.bold(`\nCall Flow: ${func.name}`));
+  console.log('='.repeat(50));
+
+  function traceFlow(currentFunc: FunctionInfo, currentDepth: number, visited: Set<string>, prefix: string = '') {
+    if (currentDepth > depth || visited.has(currentFunc.name)) {
+      if (visited.has(currentFunc.name)) {
+        console.log(`${prefix}⟳ ${currentFunc.name} (circular)`);
+      }
+      return;
+    }
+
+    visited.add(currentFunc.name);
+    console.log(`${prefix}${currentFunc.name} (${path.basename(currentFunc.filePath)}:${currentFunc.line})`);
+
+    const projectCalls = currentFunc.calls.filter(call => 
+      Array.from(functions.values()).find(f => f.name === call)
+    );
+    
+    projectCalls.forEach((call, index) => {
+      const calledFunc = Array.from(functions.values()).find(f => f.name === call);
+      const isLast = index === projectCalls.length - 1;
+      const newPrefix = prefix + (isLast ? '  ' : '│ ');
+      const connector = isLast ? '└→' : '├→';
+      
+      if (calledFunc) {
+        console.log(`${prefix}${connector} ${call}`);
+        traceFlow(calledFunc, currentDepth + 1, new Set(visited), newPrefix);
+      }
+    });
+  }
+
+  traceFlow(func, 0, new Set());
+}
+
+// Command: Show dependency graph
+function cmdGraph(funcName?: string, options?: any) {
+  const format = options?.format || 'text';
+  
+  if (format === 'mermaid') {
+    generateMermaidGraph(funcName);
+  } else if (format === 'dot') {
+    generateDotGraph(funcName);
+  } else {
+    generateTextGraph(funcName);
+  }
+}
+
+function generateTextGraph(funcName?: string) {
+  console.log(chalk.bold('\nFunction Dependency Graph'));
+  console.log('='.repeat(50));
+
+  const functionsToShow = funcName 
+    ? [Array.from(functions.values()).find(f => f.name === funcName || f.id.endsWith(`:${funcName}`))].filter(Boolean)
+    : Array.from(functions.values());
+
+  if (functionsToShow.length === 0) {
+    console.log(chalk.red(`Function "${funcName}" not found`));
+    return;
+  }
+
+  functionsToShow.forEach(func => {
+    if (!func) return;
+    
+    console.log(`\n${chalk.cyan(func.name)} (${path.basename(func.filePath)}:${func.line})`);
+    
+    // Show what this function calls (project functions only)
+    const projectCalls = func.calls.filter(call => 
+      Array.from(functions.values()).find(f => f.name === call)
+    );
+    if (projectCalls.length > 0) {
+      console.log('  → Calls:');
+      projectCalls.forEach(call => {
+        const calledFunc = Array.from(functions.values()).find(f => f.name === call);
+        if (calledFunc) {
+          console.log(`    ├─ ${call} (${path.basename(calledFunc.filePath)}:${calledFunc.line})`);
+        }
+      });
+    }
+    
+    // Show what calls this function
+    const callers = findCallers(func.name);
+    if (callers.length > 0) {
+      console.log('  ← Called by:');
+      callers.forEach(caller => {
+        console.log(`    ├─ ${caller.name} (${path.basename(caller.filePath)}:${caller.line})`);
+      });
+    }
+  });
+}
+
+function generateMermaidGraph(funcName?: string) {
+  console.log('```mermaid');
+  console.log('graph TD');
+  
+  const functionsToShow = funcName 
+    ? [Array.from(functions.values()).find(f => f.name === funcName || f.id.endsWith(`:${funcName}`))].filter(Boolean)
+    : Array.from(functions.values());
+
+  if (functionsToShow.length === 0) {
+    console.log('  %% Function not found');
+    console.log('```');
+    return;
+  }
+
+  // Generate unique IDs for mermaid
+  const nodeIds = new Map<string, string>();
+  let nodeCounter = 0;
+  
+  function getNodeId(funcName: string): string {
+    if (!nodeIds.has(funcName)) {
+      nodeIds.set(funcName, `F${nodeCounter++}`);
+    }
+    return nodeIds.get(funcName)!;
+  }
+
+  functionsToShow.forEach(func => {
+    if (!func) return;
+    
+    const funcId = getNodeId(func.name);
+    console.log(`  ${funcId}["${func.name}"]`);
+    
+    const projectCalls = func.calls.filter(call => 
+      Array.from(functions.values()).find(f => f.name === call)
+    );
+    
+    projectCalls.forEach(call => {
+      const callId = getNodeId(call);
+      console.log(`  ${callId}["${call}"]`);
+      console.log(`  ${funcId} --> ${callId}`);
+    });
+  });
+  
+  console.log('```');
+}
+
+function generateDotGraph(funcName?: string) {
+  console.log('digraph FunctionDependencies {');
+  console.log('  rankdir=TB;');
+  console.log('  node [shape=box];');
+  
+  const functionsToShow = funcName 
+    ? [Array.from(functions.values()).find(f => f.name === funcName || f.id.endsWith(`:${funcName}`))].filter(Boolean)
+    : Array.from(functions.values());
+
+  if (functionsToShow.length === 0) {
+    console.log('  // Function not found');
+    console.log('}');
+    return;
+  }
+
+  functionsToShow.forEach(func => {
+    if (!func) return;
+    
+    const projectCalls = func.calls.filter(call => 
+      Array.from(functions.values()).find(f => f.name === call)
+    );
+    
+    projectCalls.forEach(call => {
+      console.log(`  "${func.name}" -> "${call}";`);
+    });
+  });
+  
+  console.log('}');
 }
 
 // Parse command line arguments
