@@ -83,6 +83,7 @@ DATA PROVIDED:
   fos flow useAuth       # Show complete call flow
   fos graph useAuth      # Show dependency graph
   fos read useAuth -c    # Read with imports/context
+  fos analyze-repo <url> # Analyze GitHub TypeScript repositories
 
 CONSTRAINTS:
 - Requires TypeScript project with tsconfig.json
@@ -518,6 +519,7 @@ function cmdList(options: any) {
   console.log('→ See callers: ' + chalk.cyan('fos callers <function>'));
   console.log('→ Read with context: ' + chalk.cyan('fos read <function> -c'));
   console.log('→ Visualize dependencies: ' + chalk.cyan('fos graph <function>'));
+  console.log('→ Analyze remote repos: ' + chalk.cyan('fos analyze-repo <github-url>'));
   console.log(chalk.gray('Run specific commands above instead of exploring randomly.'));
 }
 
