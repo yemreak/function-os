@@ -492,6 +492,17 @@ function cmdList(options: any) {
   });
 
   console.log(chalk.bold(`\nTotal: ${filtered.length} functions`));
+  
+  // AI Agent Help
+  console.log(chalk.gray('\n' + '='.repeat(60)));
+  console.log(chalk.yellow('AI AGENT WORKFLOW GUIDE'));
+  console.log(chalk.gray('='.repeat(60)));
+  console.log('→ Find patterns: ' + chalk.cyan('fos find auth'));
+  console.log('→ Understand relationships: ' + chalk.cyan('fos flow <function>'));
+  console.log('→ See callers: ' + chalk.cyan('fos callers <function>'));
+  console.log('→ Read with context: ' + chalk.cyan('fos read <function> -c'));
+  console.log('→ Visualize dependencies: ' + chalk.cyan('fos graph <function>'));
+  console.log(chalk.gray('Run specific commands above instead of exploring randomly.'));
 }
 
 // Command: Show function info
