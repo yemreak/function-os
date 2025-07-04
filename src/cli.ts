@@ -52,20 +52,20 @@ program
   .name('fos')
   .description(`Function Operating System - TypeScript Analyzer for AI Agents
 
-CONTEXT: AI agents need to understand TypeScript codebases without reading entire files.
+CONTEXT: AI agents need function data from TypeScript codebases.
 
-INTENTION: → Enable surgical code reading through function-level analysis.
+INTENTION: → Provide function locations and relationships as raw data.
 
 WORKFLOW:
 
   fos                    # Lists all functions with locations (30 seconds)
   fos find auth          # Filters functions by pattern (10 seconds)
-  fos analyze            # Identifies inefficiencies (20 seconds)
+  fos analyze            # Shows function call counts (20 seconds)
   fos read func1 func2   # Generates sed commands for specific functions (1 minute)
   fos deps useAuth       # Shows function dependencies (10 seconds)
   fos info CTASection    # Displays function details (when needed)
 
-WHAT THE ANALYZER SHOWS:
+DATA PROVIDED:
 - Function locations (file:startLine-endLine)
 - Export status [Export] or [Internal]
 - Function signatures and parameters
@@ -179,7 +179,7 @@ program
 // Analyze command
 program
   .command('analyze')
-  .description('Analyze code health and find inefficiencies')
+  .description('Show function call frequency data')
   .action(() => {
     analyze();
     cmdAnalyze();
@@ -223,6 +223,16 @@ program
   .option('-b, --branch <branch>', 'Branch to analyze', 'main')
   .action((githubUrl, options) => {
     cmdAnalyzeRepo(githubUrl, options);
+  });
+
+// Universe command - show complete function graph
+program
+  .command('universe')
+  .description('Show complete function universe as a connected graph for AI agents')
+  .option('-e, --entry <function>', 'Start from specific entry point')
+  .option('-d, --depth <number>', 'Maximum depth to traverse', '10')
+  .action((options) => {
+    cmdUniverse(options);
   });
 
 
@@ -745,12 +755,12 @@ function cmdStats() {
     });
 }
 
-// Command: Analyze code health
+// Command: Show function call frequency
 function cmdAnalyze() {
-  console.log(chalk.bold('\nFunction Analysis Report'));
+  console.log(chalk.bold('\nFunction Call Frequency'));
   console.log('='.repeat(50));
 
-  // Find single-use functions
+  // Count function calls
   const callCounts = new Map<string, number>();
   functions.forEach(func => {
     func.calls.forEach(call => {
@@ -775,11 +785,11 @@ function cmdAnalyze() {
     }
   });
 
-  // Dependency Graph Analysis
-  console.log('\nDependency Graph Analysis:');
+  // Show raw connection data
+  console.log('\nFunction Connections:');
   console.log('='.repeat(50));
 
-  // Build adjacency list for the dependency graph
+  // Build adjacency list
   const graph = new Map<string, Set<string>>();
   const reverseGraph = new Map<string, Set<string>>();
 
@@ -829,7 +839,7 @@ function cmdAnalyze() {
   // Sort components by size
   components.sort((a, b) => b.length - a.length);
 
-  console.log(`\nFound ${components.length} dependency groups:`);
+  console.log(`\nConnected Components: ${components.length}`);
 
   // Display each component
   components.forEach((component, idx) => {
@@ -1234,6 +1244,118 @@ function generateDotGraph(funcName?: string) {
   
   console.log('}');
 }
+
+// Command: Show complete function universe as connected graph (raw data only)
+function cmdUniverse(options: any) {
+  analyze();
+  
+  const allFunctions = Array.from(functions.values());
+  
+  if (allFunctions.length === 0) {
+    console.log(chalk.yellow('No functions found in the codebase.'));
+    return;
+  }
+
+  console.log(chalk.cyan('\n=== FUNCTION UNIVERSE ===\n'));
+
+  // Show all functions with their raw relationships
+  console.log(chalk.yellow('All Functions:\n'));
+  
+  allFunctions.forEach(func => {
+    console.log(`${func.name}:`);
+    console.log(`  type: ${func.type}`);
+    console.log(`  async: ${func.async}`);
+    console.log(`  exported: ${func.exported}`);
+    console.log(`  location: ${func.filePath}:${func.line}-${func.endLine}`);
+    
+    if (func.params.length > 0) {
+      console.log(`  params:`);
+      func.params.forEach(param => {
+        console.log(`    - ${param.name}: ${param.type}${param.optional ? '?' : ''}${param.default ? ` = ${param.default}` : ''}`);
+      });
+    }
+    
+    if (func.returnType) {
+      console.log(`  returns: ${func.returnType}`);
+    }
+    
+    if (func.calls.length > 0) {
+      console.log(`  calls:`);
+      func.calls.forEach(call => {
+        console.log(`    → ${call}`);
+      });
+    }
+    
+    console.log(`  complexity: ${func.complexity}`);
+    console.log();
+  });
+
+  // Show function call graph
+  console.log(chalk.yellow('Function Call Graph:\n'));
+  
+  allFunctions.forEach(func => {
+    if (func.calls.length > 0) {
+      func.calls.forEach(calledFunc => {
+        console.log(`${func.name} → ${calledFunc}`);
+      });
+    }
+  });
+
+  // Show who calls whom (reverse dependencies)
+  console.log(chalk.yellow('\nCalled By Graph:\n'));
+  
+  const calledByMap = new Map<string, string[]>();
+  
+  allFunctions.forEach(func => {
+    func.calls.forEach(calledFunc => {
+      if (!calledByMap.has(calledFunc)) {
+        calledByMap.set(calledFunc, []);
+      }
+      calledByMap.get(calledFunc)!.push(func.name);
+    });
+  });
+  
+  calledByMap.forEach((callers, funcName) => {
+    console.log(`${funcName} ← ${callers.join(', ')}`);
+  });
+
+  // Show functions that don't call anyone
+  console.log(chalk.yellow('\nLeaf Functions (no calls):\n'));
+  const leafFunctions = allFunctions.filter(f => f.calls.length === 0);
+  leafFunctions.forEach(func => {
+    console.log(`- ${func.name}`);
+  });
+
+  // Show functions that aren't called by anyone
+  console.log(chalk.yellow('\nRoot Functions (not called):\n'));
+  const rootFunctions = allFunctions.filter(func => 
+    !allFunctions.some(f => f.calls.includes(func.name))
+  );
+  rootFunctions.forEach(func => {
+    console.log(`- ${func.name}`);
+  });
+
+  // Show async call chains
+  console.log(chalk.yellow('\nAsync Functions:\n'));
+  const asyncFunctions = allFunctions.filter(f => f.async);
+  asyncFunctions.forEach(func => {
+    console.log(`- ${func.name}${func.calls.length > 0 ? ` → ${func.calls.join(', ')}` : ''}`);
+  });
+
+  // Show exported vs internal
+  console.log(chalk.yellow('\nExported Functions:\n'));
+  const exportedFunctions = allFunctions.filter(f => f.exported);
+  exportedFunctions.forEach(func => {
+    console.log(`- ${func.name}`);
+  });
+
+  console.log(chalk.yellow('\nInternal Functions:\n'));
+  const internalFunctions = allFunctions.filter(f => !f.exported);
+  internalFunctions.forEach(func => {
+    console.log(`- ${func.name}`);
+  });
+}
+
 
 // Command: Analyze GitHub repository
 async function cmdAnalyzeRepo(githubUrl: string, options: any) {
