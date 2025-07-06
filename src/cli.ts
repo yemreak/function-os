@@ -678,7 +678,7 @@ function cmdInfo(funcName: string) {
 	if (func.calls.length > 0) {
 		console.log("\nCalls:")
 		func.calls.slice(0, 10).forEach(call => {
-			console.log(`  - ${call}`)
+			console.log(`  ${chalk.yellow("→")} ${call}`)
 		})
 		if (func.calls.length > 10) {
 			console.log(`  ... and ${func.calls.length - 10} more`)
@@ -688,12 +688,12 @@ function cmdInfo(funcName: string) {
 	if (callers.length > 0) {
 		console.log("\nCalled by:")
 		callers.forEach(caller => {
-			console.log(`  - ${caller.name} (${path.basename(caller.filePath)})`)
+			console.log(`  ${chalk.yellow("←")} ${caller.name} (${path.basename(caller.filePath)})`)
 		})
 	} else if (func.exported) {
-		console.log("\nCalled by: External consumers (exported function)")
+		console.log(`\nCalled by: ${chalk.green("↗")} External consumers (exported function)`)
 	} else {
-		console.log("\nCalled by: None (potential dead code)")
+		console.log(`\nCalled by: ${chalk.red("×")} None (potential dead code)`)
 	}
 
 	const link = `file://${path.resolve(func.filePath)}:${func.line}:1`
@@ -760,13 +760,13 @@ function cmdDeps(funcName: string) {
 		Array.from(functions.values()).find(f => f.name === call)
 	)
 	if (projectCalls.length === 0) {
-		console.log("  (none)")
+		console.log(`  ${chalk.red("×")} (none)`)
 	} else {
 		projectCalls.forEach(call => {
 			const calledFunc = Array.from(functions.values()).find(f => f.name === call)
 			if (calledFunc) {
 				console.log(
-					`  - ${call} (${path.basename(calledFunc.filePath)}:${calledFunc.line})`
+					`  ${chalk.yellow("→")} ${call} (${path.basename(calledFunc.filePath)}:${calledFunc.line})`
 				)
 			}
 		})
@@ -775,10 +775,10 @@ function cmdDeps(funcName: string) {
 	const callers = findCallers(func.name)
 	console.log("\nCalled by:")
 	if (callers.length === 0) {
-		console.log("  (none)")
+		console.log(`  ${chalk.red("×")} (none)`)
 	} else {
 		callers.forEach(caller => {
-			console.log(`  - ${caller.name} (${path.basename(caller.filePath)}:${caller.line})`)
+			console.log(`  ${chalk.yellow("←")} ${caller.name} (${path.basename(caller.filePath)}:${caller.line})`)
 		})
 	}
 }
@@ -833,10 +833,10 @@ function cmdCallers(funcName: string) {
 	console.log("=".repeat(50))
 
 	if (callers.length === 0) {
-		console.log("  (none)")
+		console.log(`  ${chalk.red("×")} (none)`)
 	} else {
 		callers.forEach(caller => {
-			console.log(`  → ${caller.name} (${path.basename(caller.filePath)}:${caller.line})`)
+			console.log(`  ${chalk.yellow("←")} ${caller.name} (${path.basename(caller.filePath)}:${caller.line})`)
 		})
 	}
 }
@@ -876,7 +876,7 @@ function cmdUniverse(_options?: any) {
 			console.log(`  params:`)
 			func.params.forEach(param => {
 				console.log(
-					`    - ${param.name}: ${param.type}${param.optional ? "?" : ""}${
+					`    ${chalk.gray("├─")} ${param.name}: ${param.type}${param.optional ? "?" : ""}${
 						param.default ? ` = ${param.default}` : ""
 					}`
 				)
@@ -890,7 +890,7 @@ function cmdUniverse(_options?: any) {
 		if (func.calls.length > 0) {
 			console.log(`  calls:`)
 			func.calls.forEach(call => {
-				console.log(`    → ${call}`)
+				console.log(`    ${chalk.yellow("→")} ${call}`)
 			})
 		}
 
@@ -906,7 +906,7 @@ function cmdUniverse(_options?: any) {
 		if (func.stateModifications && func.stateModifications.length > 0) {
 			console.log(`  modifies:`)
 			func.stateModifications.forEach(mod => {
-				console.log(`    ${mod.type}: ${mod.target}`)
+				console.log(`    ${chalk.red("⤵")} ${mod.type}: ${mod.target}`)
 			})
 		}
 
@@ -915,28 +915,28 @@ function cmdUniverse(_options?: any) {
 	})
 
 	// Show function call graph with data flow
-	console.log(chalk.yellow("Function Call Graph with Data Flow:\n"))
+	console.log(chalk.yellow("Function Call Graph:\n"))
 
 	allFunctions.forEach(func => {
 		if (func.callDetails && func.callDetails.length > 0) {
 			func.callDetails.forEach(detail => {
 				if (detail.arguments.length > 0) {
 					console.log(
-						`${func.name} → ${detail.functionName}(${detail.arguments.join(", ")})`
+						`${func.name} ${chalk.yellow("→")} ${detail.functionName}(${detail.arguments.join(", ")})`
 					)
 				} else {
-					console.log(`${func.name} → ${detail.functionName}()`)
+					console.log(`${func.name} ${chalk.yellow("→")} ${detail.functionName}()`)
 				}
 			})
 		} else if (func.calls.length > 0) {
 			func.calls.forEach(calledFunc => {
-				console.log(`${func.name} → ${calledFunc}`)
+				console.log(`${func.name} ${chalk.yellow("→")} ${calledFunc}`)
 			})
 		}
 	})
 
 	// Show who calls whom (reverse dependencies)
-	console.log(chalk.yellow("\nCalled By Graph:\n"))
+	console.log(chalk.yellow("\nReverse Dependencies:\n"))
 
 	const calledByMap = new Map<string, string[]>()
 
@@ -950,14 +950,14 @@ function cmdUniverse(_options?: any) {
 	})
 
 	calledByMap.forEach((callers, funcName) => {
-		console.log(`${funcName} ← ${callers.join(", ")}`)
+		console.log(`${funcName} ${chalk.yellow("←")} [${callers.join(", ")}]`)
 	})
 
 	// Show functions that don't call anyone
 	console.log(chalk.yellow("\nLeaf Functions (no calls):\n"))
 	const leafFunctions = allFunctions.filter(f => f.calls.length === 0)
 	leafFunctions.forEach(func => {
-		console.log(`- ${func.name}`)
+		console.log(`${chalk.gray("└─")} ${func.name}`)
 	})
 
 	// Show functions that aren't called by anyone
@@ -966,7 +966,7 @@ function cmdUniverse(_options?: any) {
 		func => !allFunctions.some(f => f.calls.includes(func.name))
 	)
 	rootFunctions.forEach(func => {
-		console.log(`- ${func.name}`)
+		console.log(`${chalk.yellow("⤴")} ${func.name}`)
 	})
 
 	// Show state-modifying functions
@@ -977,7 +977,7 @@ function cmdUniverse(_options?: any) {
 	stateModifiers.forEach(func => {
 		console.log(`${func.name}:`)
 		func.stateModifications.forEach(mod => {
-			console.log(`  ${mod.type} → ${mod.target}`)
+			console.log(`  ${chalk.red("⤵")} ${mod.type} ${chalk.yellow("→")} ${mod.target}`)
 		})
 	})
 
@@ -986,7 +986,7 @@ function cmdUniverse(_options?: any) {
 	const asyncFunctions = allFunctions.filter(f => f.async)
 	asyncFunctions.forEach(func => {
 		console.log(
-			`- ${func.name}${func.calls.length > 0 ? ` → ${func.calls.join(", ")}` : ""}`
+			`${chalk.cyan("⟳")} ${func.name}${func.calls.length > 0 ? ` ${chalk.yellow("→")} [${func.calls.join(", ")}]` : ""}`
 		)
 	})
 
@@ -994,13 +994,13 @@ function cmdUniverse(_options?: any) {
 	console.log(chalk.yellow("\nExported Functions:\n"))
 	const exportedFunctions = allFunctions.filter(f => f.exported)
 	exportedFunctions.forEach(func => {
-		console.log(`- ${func.name}`)
+		console.log(`${chalk.green("↗")} ${func.name}`)
 	})
 
 	console.log(chalk.yellow("\nInternal Functions:\n"))
 	const internalFunctions = allFunctions.filter(f => !f.exported)
 	internalFunctions.forEach(func => {
-		console.log(`- ${func.name}`)
+		console.log(`${chalk.gray("├─")} ${func.name}`)
 	})
 }
 
