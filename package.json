@@ -1,7 +1,7 @@
 {
   "name": "function-os",
   "version": "1.0.0",
-  "description": "Function Operating System - A TypeScript analyzer for AI-driven development",
+  "description": "Function Operating System - Raw function data from TypeScript codebases for AI agents",
   "main": "dist/cli.js",
   "bin": {
     "fos": "./dist/cli.js"

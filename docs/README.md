@@ -1,6 +1,6 @@
 # Function Operating System (FOS)
 
-**Built by AI for AI** - Eliminates function discovery pain for AI agents and developers. Understand TypeScript codebases 95% faster through function relationships.
+**Built for AI agents** - Provides raw function data from TypeScript codebases. Treats functions as "citizens in a universe" rather than files in folders.
 
 ## Installation
 
@@ -16,120 +16,89 @@ npm install --save-dev function-os
 
 ```bash
 # In any TypeScript project directory
-fos                     # List all functions
+fos                    # Shows LLMs.md help + lists all functions
 fos find auth          # Find auth-related functions
 fos info useAuth       # Detailed function information
-fos analyze            # Find code inefficiencies
+fos deps useAuth       # Show function dependencies
 ```
 
-## Core Commands
+## Commands
 
 ### List Functions
-
 ```bash
-fos                    # List all functions (default)
-fos list --exports     # Only exported functions
-fos list --complex     # Only complex functions (complexity > 10)
-fos list --module src/lib  # Functions in specific module
+fos                    # List all functions (shows LLMs.md first)
+fos list               # Same as above
+fos voice              # Smart resolution: finds voice.ts
+fos src/app            # List functions in specific module
 ```
 
 ### Search Functions
-
 ```bash
 fos find auth          # Find functions with "auth" in name
-fos find handle        # Find all handlers
-fos find use           # Find all React hooks
+fos find "^handle"     # Regex: find all handlers
+fos find "^use"        # Regex: find all React hooks
 ```
 
 ### Function Details
-
 ```bash
 fos info useAuth       # Show complete function details
-fos deps useAuth       # Show what function calls (project only)
+fos deps useAuth       # Show what function calls
 fos callers useAuth    # Show what calls this function
-fos flow useAuth       # Trace complete call flow
-fos graph useAuth      # Visual dependency graph
-```
-
-### Code Analysis
-
-```bash
-fos analyze            # Find inefficiencies
-fos stats              # Project statistics
-fos tree               # Module structure
-```
-
-### AI Workflow Commands
-
-```bash
-fos read useAuth isAdmin     # Get sed commands to read function bodies
-fos read useAuth -c          # Include imports and type context
-fos ai                       # Generate AI-friendly overview
-fos ai --module src/lib      # AI context for specific module
-fos ai --function useAuth    # AI context for specific function
+fos type UserProfile   # Show type definition
 ```
 
 ## Output Format
 
-Functions are displayed with implicit answers to six questions:
+Raw function data for AI processing:
 
 ```
-[Export] [Async] hasPermission(userId: string; permission: string;)
-  src/lib/permissions.ts:6-18
+functionName:
+  type: arrow|function|method|constructor|getter|setter
+  async: true|false
+  exported: true|false
+  location: path/to/file.ts:startLine-endLine
+  params:
+    - paramName: type
+  returns: ReturnType
+  calls:
+    → calledFunction
+  complexity: number
 ```
 
-This tells you:
+## AI Agent Integration
 
-- **WHO**: `[Export]` = public function
-- **WHAT**: `[Async]` + parameters = async operation with specific inputs
-- **WHERE**: `src/lib/permissions.ts:6-18`
-- **HOW**: Complexity shown when > 10
-- **WHEN**: Use `fos deps` to see relationships
-- **WHY**: Inferred from name and type
-
-## AI Agent Workflow
-
-1. **Understand the universe** (30 seconds)
-
+1. **Understand the universe**
    ```bash
    fos
    ```
 
-2. **Find specific areas** (10 seconds)
-
+2. **Find specific areas**
    ```bash
    fos find profile
    ```
 
-3. **Understand relationships** (15 seconds)
-
+3. **Trace dependencies**
    ```bash
-   fos flow MiniProfile --depth 3
+   fos deps MiniProfile
    fos callers useAuth
    ```
 
-4. **Read with context** (30 seconds)
-
+4. **Get type information**
    ```bash
-   fos read MiniProfile useAuth -c
-   # Copy and run the generated sed commands
+   fos type UserProfile
    ```
-
-5. **Make intelligent decisions** based on the analysis
 
 ## Features
 
-- **faster** than reading files
+- **Nested function detection** - finds functions inside objects
+- **Smart path resolution** - handles files with/without extensions
+- **Raw data output** - no visualizations, just data
+- **Module filtering** - analyze specific parts of codebases
 - **Zero configuration** - works with any TypeScript project
-- **AI-optimized** output format
-- **Surgical precision** - read only the functions you need
-- **Pattern detection** - find inefficiencies automatically
 
 ## Philosophy
 
-**Customer Pain → Solution** - AI agents report navigation pains, we eliminate them. No features without proven pain points.
-
-Functions are citizens in a universe. FOS eliminates the cognitive overhead of file navigation, letting AI agents understand codebases through relationships, not hierarchies.
+Functions are the atomic unit of programming. FOS provides only raw data - AI agents process it. No complex features, no visualizations, just function data.
 
 ## License
 

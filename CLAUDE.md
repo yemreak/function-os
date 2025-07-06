@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Function Operating System (FOS)?
 
-FOS is a TypeScript analyzer CLI tool that treats functions as "citizens in a universe" rather than just code in files. It enables AI agents to understand TypeScript codebases 95% faster through surgical precision reading.
+FOS is a TypeScript analyzer CLI tool that treats functions as "citizens in a universe" rather than just code in files. It provides raw function data for AI agents to process, enabling surgical precision reading of TypeScript codebases.
 
 ## Common Development Commands
 
@@ -16,20 +16,19 @@ npm run dev           # Run in development mode with ts-node
 
 ### Using FOS (after global install: `npm install -g function-os`)
 ```bash
-fos                   # List all functions in the universe
-fos find auth         # Find auth-related functions
+fos                   # Shows LLMs.md help + lists all functions
+fos find auth         # Find auth-related functions  
 fos info useAuth      # Detailed function information
-fos analyze           # Find code inefficiencies (single-use functions, complexity)
-fos read func1 func2  # Generate sed commands to read specific functions
 fos deps useAuth      # Show what useAuth depends on
-fos tree              # Module structure visualization
-fos ai                # AI-friendly codebase overview
+fos callers useAuth   # Show what calls useAuth
+fos type UserProfile  # Show type definition
+fos src/app           # List functions in specific module
 ```
 
 ## Architecture Overview
 
 ### Single File Architecture
-The entire FOS implementation lives in `src/cli.ts` (854 lines). This follows the project's philosophy of "single module = complete feature" - everything needed to understand and modify FOS is in one place.
+The entire FOS implementation lives in `src/cli.ts`. This follows the project's philosophy of "single module = complete feature" - everything needed to understand and modify FOS is in one place.
 
 ### Core Components in cli.ts
 
@@ -51,10 +50,10 @@ The entire FOS implementation lives in `src/cli.ts` (854 lines). This follows th
 
 ### Key Design Decisions
 
-1. **Terminal-First**: Solve with terminal commands before writing code
+1. **Raw Data Only**: FOS provides data, AI agents process it
 2. **Function-First Features**: New features start as functions, not classes
-3. **Motion-Based UI**: Symbols indicate action (→, ←, ↑, ↓, ⟳, ✓, ×)
-4. **AI-Optimized Output**: Generates commands for surgical code reading
+3. **Nested Function Detection**: Finds functions inside objects and other functions
+4. **Smart Path Resolution**: Handles files with/without extensions automatically
 
 ### Development Workflow
 
