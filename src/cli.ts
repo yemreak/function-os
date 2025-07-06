@@ -59,42 +59,7 @@ const program = new Command()
 
 program
 	.name("fos")
-	.description(
-		`Function Operating System - TypeScript Analyzer for AI Agents
-
-CONTEXT: AI agents need function data from TypeScript codebases.
-
-INTENTION: → Provide function locations and relationships as raw data.
-
-WORKFLOW:
-
-  fos                       # Lists all functions with locations (30 seconds)
-  fos src/app/telegram      # Lists functions in specific module
-  fos find auth             # Filters functions by pattern (10 seconds)
-  fos deps useAuth          # Shows function dependencies (10 seconds)
-  fos info CTASection       # Displays function details (when needed)
-
-DATA PROVIDED:
-- Function locations (file:startLine-endLine)
-- Export status [Export] or [Internal]
-- Function signatures and parameters
-- Function calls and dependencies
-
-DATA PROVIDED:
-  fos                    # List all functions with locations
-  fos src/app            # List functions in specific module/folder
-  fos voice              # List functions in voice.ts file
-  fos find "^use.*"      # Filter functions by regex pattern
-  fos info MiniProfile   # Show function details
-  fos type BotContext    # Show type definition with location
-  fos deps useAuth       # Show function dependencies
-  fos callers useAuth    # Show functions that call this function
-
-CONSTRAINTS:
-- Requires TypeScript project with tsconfig.json
-- Functions must be named (anonymous functions excluded)
-- Analyzes .ts and .tsx files only`
-	)
+	.description("Function Operating System - TypeScript Analyzer for AI Agents")
 	.version("1.0.0")
 
 // Main list command (default)
@@ -878,6 +843,14 @@ function cmdCallers(funcName: string) {
 
 // Command: Show complete function universe as connected graph (raw data only)
 function cmdUniverse(_options?: any) {
+	// First show LLMs.md content
+	const llmsPath = path.join(__dirname, "..", "LLMs.md")
+	if (fs.existsSync(llmsPath)) {
+		const llmsContent = fs.readFileSync(llmsPath, "utf8")
+		console.log(chalk.cyan("\n" + llmsContent + "\n"))
+		console.log(chalk.gray("=".repeat(80) + "\n"))
+	}
+
 	analyze()
 
 	const allFunctions = Array.from(functions.values())
